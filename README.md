@@ -78,7 +78,7 @@ python pycolorscad.py \
    openscad -o red.3mf -D render_color="red" mmu_template.scad
    ```
    This produces one 3MF file per color.  
-3. **Merge** – Using lib3m`, each temporary .3mf is loaded and assigned its color, then all are merged into a single output .3mf.  
+3. **Merge** – Using lib3m, each temporary .3mf is loaded and assigned its color, then all are merged into a single output .3mf.  
 4. **Cleanup** – Temporary files are deleted after merging.
 
 ## Troubleshooting
