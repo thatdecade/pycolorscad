@@ -1,3 +1,24 @@
+"""
+File: pycolorscad.py
+Date: January 27, 2025
+Author: Dustin Westaby
+License: MIT
+
+Purpose:
+  This script extracts color() calls from a .scad file, redefines color() at runtime to render each color separately, 
+  and merges the resulting files into one color-accurate 3mf model.
+
+Basic Usage:
+  python pycolorscad.py --input your_model.scad --output combined.3mf
+  
+  - Uses multiple threads to render each color-based .3mf in parallel.
+  - Then merges them into a single .3mf with accurate color assignments.
+
+Dependencies:
+  - pip install lib3mf matplotlib
+
+"""
+
 import os
 import re
 import sys
@@ -5,7 +26,7 @@ import argparse
 import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-import lib3mf
+import lib3mf # https://pypi.org/project/lib3mf/
 from matplotlib.colors import to_rgba
 
 # Determine a suitable OpenSCAD path based on platform
@@ -55,9 +76,6 @@ def generate_3mf_for_color(color_name, scad_file, openscad_path):
     return filename
 
 def rotate_indices(triangle):
-    """
-    Optional step: rotate triangle indices so the smallest index is first, matching typical 3mfmerge.exe logic for consistent ordering.
-    """
     idx = list(triangle.Indices)
     if idx[1] < idx[0] and idx[1] < idx[2]:
         idx = [idx[1], idx[2], idx[0]]
