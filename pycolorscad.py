@@ -1,6 +1,6 @@
 """
 File: pycolorscad.py
-Date: January 27, 2025
+Date: January 28, 2025
 Author: Dustin Westaby
 License: MIT
 
@@ -29,18 +29,82 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import lib3mf # https://pypi.org/project/lib3mf/
 from matplotlib.colors import to_rgba
 
-# Determine a suitable OpenSCAD path based on platform
-if sys.platform.startswith("win"):
-    DEFAULT_OPENSCAD = r"C:\Program Files\OpenSCAD\openscad.exe"
-elif sys.platform.startswith("darwin"):
-    DEFAULT_OPENSCAD = "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
-else:
-    DEFAULT_OPENSCAD = "openscad"
+# Some test paths for OpenSCAD
+WINDOWS_DEFAULT_PATHS = [
+    r"C:\Program Files\OpenSCAD\openscad.exe",
+    r"C:\Program Files\OpenSCAD (Nightly)\openscad.exe",
+]
+
+MAC_DEFAULT_PATHS = [
+    "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD",
+    "/Applications/OpenSCAD (Nightly).app/Contents/MacOS/OpenSCAD",
+    "/usr/local/bin/openscad",
+    "/usr/local/bin/openscad-nightly",
+]
+
+LINUX_DEFAULT_PATHS = [
+    "openscad",
+    "/usr/bin/openscad",
+    "/usr/bin/openscad-nightly",
+    "/usr/local/bin/openscad",
+    "/usr/local/bin/openscad-nightly",
+    "~/Applications/OpenSCAD-Nightly.AppImage",
+    "/snap/bin/openscad-nightly",
+]
+
+def _test_openscad_single(path_candidate):
+    """
+    Try running `path_candidate --version`.
+    Return True if successful, otherwise False.
+    """
+    try:
+        subprocess.run(
+            [path_candidate, "--version"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        return True
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return False
+        
+def find_working_openscad_path(user_path=None):
+    """
+    Attempt to find a working OpenSCAD path.
+    Return the first path that works.
+    """
+
+    # 1. If user specified a path, test that first
+    if user_path:
+        if _test_openscad_single(user_path):
+            return user_path
+        else:
+            print(f"WARNING: OpenSCAD not found or invalid at '{user_path}'. Trying defaults...")
+
+    # 2. Platform-specific paths
+    if sys.platform.startswith("win"):
+        default_paths = WINDOWS_DEFAULT_PATHS
+    elif sys.platform.startswith("darwin"):
+        default_paths = MAC_DEFAULT_PATHS
+    else:
+        default_paths = LINUX_DEFAULT_PATHS
+
+    # 3. Try each default path in turn
+    for candidate in default_paths:
+        if _test_openscad_single(candidate):
+            return candidate
+
+    # 4. No success => instruct user to specify manually
+    print("ERROR: Could not find a working OpenSCAD path.\n")
+    print("Please install OpenSCAD or specify a custom path with --openscad.")
+    print("Typical paths might include:")
+    for c in default_paths:
+        print(f"  {c}")
+    sys.exit(1)
 
 def extract_colors(scad_file):
     """
     Extract unique color names from lines containing `color()`.
-    Adjust the regex if your .scad code uses a different pattern.
     """
     with open(scad_file, 'r', encoding='utf-8') as file:
         content = file.read()
@@ -59,11 +123,11 @@ def generate_3mf_for_color(color_name, scad_file, openscad_path):
     filename = f"{color_name}.3mf"
     print(f"Generating {filename} for color '{color_name}'...")
 
-    # Define color(c) so that it only renders the child objects if c matches color_name
+    # Re-define color(c) so that it only renders the child objects if c matches color_name
     redefine_color = (
         'module color(c) {'
         f' if (str(c)==\"{color_name}\") children();'
-        '}' 
+        '}'
     )
 
     subprocess.run([
@@ -76,6 +140,9 @@ def generate_3mf_for_color(color_name, scad_file, openscad_path):
     return filename
 
 def rotate_indices(triangle):
+    """
+    Rotate triangle indices so the smallest index is first, matching typical 3mfmerge.exe logic for consistent ordering.
+    """
     idx = list(triangle.Indices)
     if idx[1] < idx[0] and idx[1] < idx[2]:
         idx = [idx[1], idx[2], idx[0]]
@@ -136,7 +203,7 @@ def merge_3mf_files(input_files, output_file):
             verts = mesh_obj.GetVertices()
             tris = mesh_obj.GetTriangleIndices()
 
-            # Optional: rotate & sort triangles for consistent ordering
+            # Rotate & sort triangles for consistent ordering
             rotated_tris = [rotate_indices(t) for t in tris]
             rotated_tris.sort(key=lambda tri: (tri.Indices[0], tri.Indices[1], tri.Indices[2]))
 
@@ -177,18 +244,22 @@ def main():
     parser = argparse.ArgumentParser(
         description="Override color() at runtime to extract each color from an OpenSCAD file, then merge into a single .3mf."
     )
-    parser.add_argument("-i", "--input", required=True, help="Original .scad file")
-    parser.add_argument("-o", "--output", help="Final .3mf filename")
-    parser.add_argument("--openscad", default=DEFAULT_OPENSCAD, help="Path to the OpenSCAD executable")
+    parser.add_argument("-i", "--input", required=True,   help="Original .scad file")
+    parser.add_argument("-o", "--output",                 help="Final .3mf filename")
+    parser.add_argument("--openscad",                     help="Path to the OpenSCAD executable")
     parser.add_argument("--threads", type=int, default=4, help="Number of threads to use for parallel rendering")
     args = parser.parse_args()
 
-    scad_file = args.input
-    if not os.path.isfile(scad_file):
-        print(f"Error: Cannot find input file '{scad_file}'")
+    # Find a working OpenSCAD path
+    openscad_path = find_working_openscad_path(args.openscad)
+
+    # Ensure .scad file exists
+    if not os.path.isfile(args.input):
+        print(f"Error: Cannot find input file -i {args.input}")
         return
 
-    # Step 1: Extract color names from the .scad file
+    # Step 1: Extract color names
+    scad_file = args.input
     colors = extract_colors(scad_file)
     print(f"Found {len(colors)} color(s): {colors}")
 
@@ -196,7 +267,7 @@ def main():
     temp_files = []
     with ThreadPoolExecutor(max_workers=args.threads) as executor:
         futures = {
-            executor.submit(generate_3mf_for_color, c, scad_file, args.openscad): c
+            executor.submit(generate_3mf_for_color, c, scad_file, openscad_path): c
             for c in colors
         }
         for fut in as_completed(futures):
@@ -206,7 +277,7 @@ def main():
             except Exception as e:
                 print(f"Error generating '{color}.3mf': {e}")
 
-    # Step 3: Merge all color-specific 3MFs into one
+    # Step 3: Merge the .3mf files
     if args.output:
         final_3mf = args.output
     else:
@@ -215,7 +286,7 @@ def main():
     print("Merging generated 3MF files...")
     merge_3mf_files(temp_files, final_3mf)
 
-    # Step 4: Cleanup temporary color-specific 3MFs
+    # Step 4: Cleanup temporary 3MF files
     for temp_file in temp_files:
         try:
             os.remove(temp_file)
