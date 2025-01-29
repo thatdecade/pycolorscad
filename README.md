@@ -1,3 +1,16 @@
+
+> **Looking for a built-in solution?**  
+> As of 2025, the OpenSCAD nightly snapshot has the feature to export 3MF files with embedded colors **directly**:
+> 1. In **Preferences** → **Advanced Export Features**, enable **Toolbar Export 3D: 3MF**.
+> 2. Click **3MF Export** from the toolbar.
+> 3. In Export 3MF Options, set **Colors** to “Use colors from model and color scheme” and **Export colors as** “Color.”  
+>   
+> **No extra scripts needed** your `.scad` model’s `color()` calls will export into a 3MF ready for multi-material printing!
+
+If you prefer a **stable release** of OpenSCAD (or want more control over merging), you can still use **pycolorscad**, read on...
+
+---
+
 # pycolorscad
 
 **pycolorscad** is a Python script that processes an OpenSCAD file containing `color()` calls, renders each color separately, and merges them into one color-preserving 3MF file. 
