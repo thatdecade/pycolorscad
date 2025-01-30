@@ -1,6 +1,6 @@
 """
 File: pycolorscad.py
-Date: January 28, 2025
+Date: January 30, 2025
 Author: Dustin Westaby
 License: MIT
 
@@ -116,7 +116,7 @@ def extract_colors(scad_file):
         sys.exit(1)
     return list(colors)
 
-def generate_3mf_for_color(color_name, scad_file, openscad_path):
+def generate_3mf_for_color(color_name, scad_file, openscad_path, user_args):
     """
     Run OpenSCAD with a custom definition of color() that only renders shapes if str(c) == color_name.
     """
@@ -134,7 +134,8 @@ def generate_3mf_for_color(color_name, scad_file, openscad_path):
         openscad_path,
         "-o", filename,
         "-D", redefine_color,
-        scad_file
+        scad_file,
+        *user_args
     ], check=True)
 
     return filename
@@ -248,7 +249,7 @@ def main():
     parser.add_argument("-o", "--output",                 help="Final .3mf filename")
     parser.add_argument("--openscad",                     help="Path to the OpenSCAD executable")
     parser.add_argument("--threads", type=int, default=4, help="Number of threads to use for parallel rendering")
-    args = parser.parse_args()
+    args, user_args = parser.parse_known_args() #capture unexpected args as user args to pass to OpenSCAD
 
     # Find a working OpenSCAD path
     openscad_path = find_working_openscad_path(args.openscad)
@@ -267,7 +268,7 @@ def main():
     temp_files = []
     with ThreadPoolExecutor(max_workers=args.threads) as executor:
         futures = {
-            executor.submit(generate_3mf_for_color, c, scad_file, openscad_path): c
+            executor.submit(generate_3mf_for_color, c, scad_file, openscad_path, user_args): c
             for c in colors
         }
         for fut in as_completed(futures):
